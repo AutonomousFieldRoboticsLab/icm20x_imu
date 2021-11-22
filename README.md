@@ -12,6 +12,8 @@ These steps should allow you to completely install and run an icm20948 thoruhg a
 
 Connect the ft232h to the icm20948 using the jst cable. Then connect the usb c to the ft232h, and plug in to the desired system via USB A
 
+**Note:** if the Ft232h chip is a newer version with a small switch at the top that says 'i2c mode', make sure it is switched to 'on'
+
 ### Libraries
 * python3 and ROS (Tested with ROS Noetic)
 * Blinka CircuitPython - Use [this page in this guide](https://learn.adafruit.com/circuitpython-on-any-computer-with-ft232h/linux) to install blinka circuit python to your machine
