@@ -1,79 +1,99 @@
 #!/usr/bin/env python3
 
-# Author: Alex Johnson adapted from Adafruit circuitpython icm20x example code
-#	and from afrl/driftNode code
+# Author: Bharat Joshi
 # For use with the ICM20948
 
 
-import time
 import board
+import busio
 import adafruit_icm20x
 import rospy
 from sensor_msgs.msg import Imu
+from sensor_msgs.msg import MagneticField
+
 
 class imuNode:
+    def __init__(self):
 
-	def __init__(self):
-		self.i2c = board.I2C()
-		self.icm = adafruit_icm20x.ICM20948(self.i2c)
-		self.pub = rospy.Publisher("/imu/data", Imu, queue_size=10)
-		rospy.init_node("imu_publisher")
+        self.freq = 1000000  # 1 MHz
+        self.i2c = busio.I2C(board.SCL, board.SDA, frequency=self.freq)
+        self.icm = adafruit_icm20x.ICM20948(self.i2c)
 
-		self.seq = 0
-		self.prefix = "imu_"
+        self.imu_pub = rospy.Publisher("/imu/data_raw", Imu, queue_size=10)
+        self.mag_pub = rospy.Publisher(
+            "/imu/mag", MagneticField, queue_size=10)
 
-		self.imu_rate = int( rospy.get_param("imu_rate") ) # Hz
-		self.debug = int( rospy.get_param("debug") ) #debug flag, prints info
-		if self.debug:
-			rospy.loginfo("DEBUG ENABLED")
-			rospy.Subscriber("/imu/data", Imu, self.debug_callback)
+        rospy.init_node("icm20948_node")
 
-		self.icm.accelerometer_data_rate = self.imu_rate
-		self.icm.gyro_data_rate = self.imu_rate
-		# magnetometer can only be 100, 50, 20, or 10 Hz
-		# 100 is default
-		# self.icm.magnetometer_data_rate = adafruit_icm20x.MagDataRate.RATE_100HZ
+        self.seq = 0
 
+        self.imu_rate = rospy.get_param("~imu_rate")
 
-		self.rate = rospy.Rate(self.imu_rate)
+        self.event_time = 1.0 / float(self.imu_rate)  # type: ignore
 
-		while not rospy.is_shutdown():
-			self.publish_data()
-			self.seq +=1
+        self.icm.accelerometer_data_rate_divisor = 0
+        self.icm.accelerometer_data_rate_divisor = 0
+        self.icm.magnetometer_data_rate = adafruit_icm20x.MagDataRate.RATE_100HZ  # type: ignore
 
-			self.rate.sleep()
+        self.imu_publish_timer = rospy.Timer(
+            rospy.Duration.from_sec(self.event_time), self.publish_imu_data)
+        self.mag_publish_timer = rospy.Timer(
+            rospy.Duration.from_sec(self.event_time * 4.0), self.publish_mag_data)
 
+    def publish_imu_data(self, timer_event):
+        imu_msg = Imu()
 
-	def publish_data(self):
-		self.msg = Imu()
+        # header vals
+        imu_msg.header.seq = self.seq
+        imu_msg.header.frame_id = "imu"
 
-		# header vals
-		self.msg.header.seq = self.seq
-		self.msg.header.frame_id = self.prefix
-		time = rospy.get_rostime()
-		self.msg.header.stamp.secs = time.secs
-		self.msg.header.stamp.nsecs = time.nsecs
+        # data
+        imu_start_time = rospy.Time.now()
+        accel_data = self.icm.acceleration
+        gyro_data = self.icm.gyro
+        imu_stop_time = rospy.Time.now()
 
-		# data
-		self.msg.linear_acceleration.x = self.icm.acceleration[0]
-		self.msg.linear_acceleration.y = self.icm.acceleration[1]
-		self.msg.linear_acceleration.z = self.icm.acceleration[2]
-		self.msg.angular_velocity.x = self.icm.gyro[0]
-		self.msg.angular_velocity.y = self.icm.gyro[1]
-		self.msg.angular_velocity.z = self.icm.gyro[2]
-		self.msg.orientation.x = self.icm.magnetic[0]
-		self.msg.orientation.y = self.icm.magnetic[1]
-		self.msg.orientation.z = self.icm.magnetic[2]
+        # TODO(bjoshi): Just averaging the imu times to publish
+        # Since we do not get the actual time from device
+        stamp = imu_start_time + \
+            rospy.Duration.from_sec(
+                (imu_stop_time - imu_start_time).to_sec() * 0.5)
+        imu_msg.header.stamp = stamp
 
-		self.pub.publish(self.msg)
+        imu_msg.linear_acceleration.x = accel_data[0]
+        imu_msg.linear_acceleration.y = accel_data[1]
+        imu_msg.linear_acceleration.z = accel_data[2]
+        imu_msg.angular_velocity.x = gyro_data[0]
+        imu_msg.angular_velocity.y = gyro_data[1]
+        imu_msg.angular_velocity.z = gyro_data[2]
 
+        self.imu_pub.publish(imu_msg)
 
-	def debug_callback(self, msg):
-		if self.debug:
-			rospy.loginfo("DEBUG TRUE")
-			rospy.loginfo(msg)
-			rospy.loginfo( "Rate: {0} \nSeq: {1}".format(self.imu_rate, self.seq) )
+        self.seq += 1
+
+    def publish_mag_data(self, timer_event):
+
+        mag_msg = MagneticField()
+        mag_msg.header.seq = self.seq
+        mag_msg.header.frame_id = "imu"
+
+        # TODO(bjoshi): Just averaging the imu times to publish
+        # Since we do not get the actual time from device
+        mag_start_time = rospy.Time.now()
+        mag_data = self.icm.magnetic
+        mag_stop_time = rospy.Time().now()
+        stamp = mag_start_time + \
+            rospy.Duration.from_sec(
+                (mag_stop_time - mag_start_time).to_sec() * 0.5)
+
+        mag_msg.header.stamp = stamp
+        mag_msg.magnetic_field.x = mag_data[0]
+        mag_msg.magnetic_field.y = mag_data[1]
+        mag_msg.magnetic_field.z = mag_data[2]
+
+        self.mag_pub.publish(mag_msg)
 
 
 if __name__ == "__main__":
-	imuNode()
+    imuNode()
+    rospy.spin()

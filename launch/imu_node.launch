@@ -1,11 +1,10 @@
 <launch>
-	<arg name="imu_rate_arg" default="60"/>
-	<arg name="debug_arg" default="0"/>
+	<arg name="imu_rate_arg" default="80"/>
 
-	<param name="imu_rate" value="$(arg imu_rate_arg)"/>
-	<param name="debug" value="$(arg debug_arg)"/>
+	<env name="BLINKA_FT232H" value="1"/>
+	<node pkg="icm20x_imu" name="imu_node" type="icm20948_node.py" output="screen">
 
-
-    <node pkg="icm20x_imu" name="imu_node" type="icm20948_node.py" respawn="true" respawn_delay="30" output="screen"/>
+		<param name="imu_rate" value="$(arg imu_rate_arg)"/>
+	</node>
 
 </launch>
