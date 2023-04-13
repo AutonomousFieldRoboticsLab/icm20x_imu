@@ -38,7 +38,7 @@ class imuNode:
         self.imu_publish_timer = rospy.Timer(
             rospy.Duration.from_sec(self.event_time), self.publish_imu_data)
         self.mag_publish_timer = rospy.Timer(
-            rospy.Duration.from_sec(self.event_time * 4.0), self.publish_mag_data)
+            rospy.Duration.from_sec(0.05), self.publish_mag_data)
 
     def publish_imu_data(self, timer_event):
         imu_msg = Imu()
